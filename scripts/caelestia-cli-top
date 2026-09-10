@@ -1,0 +1,27 @@
+#!/bin/sh
+# CLI-TOP rewrites its session file during requests and corrupts it when two
+# instances overlap. Serialize every dashboard call through one user lock.
+set -eu
+
+cli_top_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/cli-top"
+disabled_file="$cli_top_config_dir/caelestia-dashboard-disabled"
+if [ -e "$disabled_file" ]; then
+    printf '%s\n' "CLI-TOP dashboard access is disabled" >&2
+    exit 77
+fi
+
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+lock_file="$runtime_dir/caelestia-cli-top.lock"
+exec 9>"$lock_file"
+if ! flock -w 45 9; then
+    printf '%s\n' "CLI-TOP is busy; try refreshing again" >&2
+    exit 75
+fi
+
+cli_top_bin="${CAELESTIA_CLI_TOP_BIN:-$HOME/cli-top/cli-top}"
+if [ ! -x "$cli_top_bin" ]; then
+    printf '%s\n' "CLI-TOP binary not found: $cli_top_bin" >&2
+    exit 127
+fi
+
+exec "$cli_top_bin" "$@"
